@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import * as pdfjsLib from 'pdfjs-dist/build/pdf'
+// Use legacy ESM build for compatibility
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
 // Bundle the matching pdf.js worker via Vite to avoid version mismatches
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - Vite's ?worker returns a constructor for Worker
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker'
 const workerInstance = new (pdfjsWorker as unknown as { new (): Worker })()
-;(pdfjsLib as any).GlobalWorkerOptions.workerPort = workerInstance
+// Set worker via workerPort to match the library version bundled by Vite
+;(pdfjsLib as unknown as { GlobalWorkerOptions: { workerPort: Worker | null } }).GlobalWorkerOptions.workerPort = workerInstance
 
 export function usePdf() {
   const pdfRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null)

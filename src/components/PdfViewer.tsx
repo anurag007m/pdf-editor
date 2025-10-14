@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useEditor } from '../context/EditorContext'
 import type { OverlayItem } from '../context/EditorContext'
 import { usePdf } from '../hooks/usePdf'
-import * as pdfjsLib from 'pdfjs-dist/build/pdf'
+// Use legacy build which ships stable ESM entry and Util helpers
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
 
 function uuid() {
   return Math.random().toString(36).slice(2)
@@ -84,9 +85,10 @@ export default function PdfViewer() {
       const page = await doc.getPage(state.page)
       const viewport = page.getViewport({ scale: 1 })
       const content = await page.getTextContent()
-      const items = content.items.map((it: any) => {
-        const m = pdfjsLib.Util.transform(viewport.transform, it.transform)
-        return { str: it.str, transform: m as number[] }
+      const items = content.items.map((it: unknown) => {
+        const anyIt = it as { str: string; transform: number[] }
+        const m = pdfjsLib.Util.transform(viewport.transform, anyIt.transform)
+        return { str: anyIt.str, transform: m as number[] }
       })
       setTextItems(items)
       if (textLayerRef.current) {
@@ -95,8 +97,9 @@ export default function PdfViewer() {
       }
     }
     run()
+    // Rebuild when page changes or after pageCount updates post-load
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.page, state.pdfArrayBuffer])
+  }, [state.page, state.pageCount])
 
   const getRelativePoint = (e: React.MouseEvent) => {
     const rect = overlayRef.current!.getBoundingClientRect()
@@ -131,27 +134,34 @@ export default function PdfViewer() {
     
     // Extract text from selected spans
     const text = selectedSpans.map((sp) => sp.textContent || '').join(' ').trim()
-    if (!text) {
-      console.log('No text found in selection area')
-      return
+
+    // Always add a white rectangle to redact underlying PDF text in export
+    const redactRect: OverlayItem = {
+      id: uuid(),
+      page: state.page,
+      type: 'rectangle',
+      x: rect.x,
+      y: rect.y,
+      width: Math.max(1, rect.width),
+      height: Math.max(1, rect.height),
+      color: '#ffffff',
+      opacity: 1,
     }
-    
-    console.log('Selected text:', text)
-    
-    // Create text overlay item
+    dispatch({ type: 'ADD_OVERLAY', item: redactRect })
+
+    // Create a text overlay (pre-fill with selected text if present)
     const item: OverlayItem = {
       id: uuid(),
       page: state.page,
       type: 'text',
       x: rect.x,
       y: rect.y,
-      width: Math.max(100, rect.width), // Ensure minimum width for editing
-      height: Math.max(20, rect.height), // Ensure minimum height for editing
-      text,
+      width: Math.max(60, rect.width),
+      height: Math.max(18, rect.height),
+      text: text || '',
       fontSize: Math.max(12, Math.round(rect.height * 0.8)),
       color: '#111827',
     }
-    
     dispatch({ type: 'ADD_OVERLAY', item })
     setSelectedId(item.id)
     setPendingFocusId(item.id)
